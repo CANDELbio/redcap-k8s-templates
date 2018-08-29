@@ -1,0 +1,77 @@
+# Job to sync RWS data locally.
+apiVersion: batch/v1beta1
+kind: CronJob
+metadata:
+  name: redcap-cron
+  namespace: redcap
+spec:
+  schedule: "* * * * *"
+  concurrencyPolicy: Forbid
+  jobTemplate:
+    spec:
+      template:
+        metadata:
+          name: redcap-cron
+          labels:
+            name: redcap-cron
+        spec:
+          restartPolicy: Never
+          nodeSelector:
+            cloud.google.com/gke-nodepool: default-pool
+          containers:
+          - name: redcap-cron
+            image: gcr.io/<PROJECT_ID>/redcap:8.6.0
+            command: ["/usr/bin/php", "/var/www/site/cron.php"]
+            env:
+              - name: SALT
+                valueFrom:
+                  secretKeyRef:
+                    name: redcap-server-secrets
+                    key: salt
+              - name: DB_HOSTNAME
+                value: 'cloudsql-proxy'
+              - name: DB_NAME
+                valueFrom:
+                  secretKeyRef:
+                    name: cloudsql-db-credentials
+                    key: database
+              - name: DB_USERNAME
+                valueFrom:
+                  secretKeyRef:
+                    name: cloudsql-db-credentials
+                    key: username
+              - name: DB_PASSWORD
+                valueFrom:
+                  secretKeyRef:
+                    name: cloudsql-db-credentials
+                    key: password
+            volumeMounts:
+              - name: ssmtp-credentials
+                mountPath: /etc/ssmtp/
+                readOnly: true
+            securityContext:
+              privileged: true
+              capabilities:
+                add:
+                  - SYS_ADMIN
+            lifecycle:
+              postStart:
+                exec:
+                  command:
+                    - "sh"
+                    - "-c"
+                    - >
+                      gcsfuse -o nonempty -o allow_other --dir-mode 777 --file-mode 777 redcap /mnt/redcap-bucket;
+                      gcsfuse -o nonempty -o allow_other --dir-mode 777 --file-mode 777 redcap-temp /var/www/site/temp;
+              preStop:
+                exec:
+                  command:
+                    - "sh"
+                    - "-c"
+                    - >
+                      fusermount -u /mnt/redcap-bucket;
+                      fusermount -u /var/www/site/temp;
+          volumes:
+            - name: ssmtp-credentials
+              secret:
+                secretName: ssmtp-credentials

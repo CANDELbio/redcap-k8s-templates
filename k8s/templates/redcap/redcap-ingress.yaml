@@ -1,0 +1,24 @@
+apiVersion: extensions/v1beta1
+kind: Ingress
+metadata:
+  name: redcapweb
+  namespace: redcap
+  annotations:
+    kubernetes.io/ingress.class: nginx
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+  labels:
+    app: redcap
+spec:
+  rules:
+    - host: redcap.yourdomain.org
+      http:
+        paths:
+          - backend:
+              serviceName: redcap-backend
+              servicePort: 80
+            path: /
+  tls:
+      - hosts:
+          - redcap.yourdomain.org
+        secretName: redcap-yourdomain-org-tls

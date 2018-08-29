@@ -1,0 +1,94 @@
+apiVersion: extensions/v1beta1
+kind: Deployment
+metadata:
+  name: redcap
+  namespace: redcap
+  labels:
+    app: redcap
+spec:
+  replicas: 2
+  selector:
+    matchLabels:
+      app: redcap
+  strategy:
+    type: RollingUpdate
+    rollingUpdate:
+      maxSurge: 1
+      maxUnavailable: 1
+  template:
+    metadata:
+      labels:
+        app: redcap
+        tier: web
+    spec:
+      containers:
+        - name: redcap-server
+          image: gcr.io/<PROJECT_ID>/redcap:8.6.0
+          command: ["/usr/sbin/apache2ctl", "-D", "FOREGROUND"]
+          ports:
+            - containerPort: 80
+          livenessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 30
+            timeoutSeconds: 1
+          readinessProbe:
+            httpGet:
+              path: /
+              port: 80
+            initialDelaySeconds: 30
+            timeoutSeconds: 1
+          env:
+            - name: SALT
+              valueFrom:
+                secretKeyRef:
+                  name: redcap-server-secrets
+                  key: salt
+            - name: DB_HOSTNAME
+              value: 'cloudsql-proxy'
+            - name: DB_NAME
+              valueFrom:
+                secretKeyRef:
+                  name: cloudsql-db-credentials
+                  key: database
+            - name: DB_USERNAME
+              valueFrom:
+                secretKeyRef:
+                  name: cloudsql-db-credentials
+                  key: username
+            - name: DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: cloudsql-db-credentials
+                  key: password
+          volumeMounts:
+            - name: ssmtp-credentials
+              mountPath: /etc/ssmtp/
+              readOnly: true
+          securityContext:
+            privileged: true
+            capabilities:
+              add:
+                - SYS_ADMIN
+          lifecycle:
+            postStart:
+              exec:
+                command:
+                  - "sh"
+                  - "-c"
+                  - >
+                    gcsfuse -o nonempty -o allow_other --dir-mode 777 --file-mode 777 redcap /mnt/redcap-bucket;
+                    gcsfuse -o nonempty -o allow_other --dir-mode 777 --file-mode 777 redcap-temp /var/www/site/temp;
+            preStop:
+              exec:
+                command:
+                  - "sh"
+                  - "-c"
+                  - >
+                    fusermount -u /mnt/redcap-bucket;
+                    fusermount -u /var/www/site/temp;
+      volumes:
+        - name: ssmtp-credentials
+          secret:
+            secretName: ssmtp-credentials
