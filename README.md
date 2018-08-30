@@ -3,7 +3,7 @@
 This project contains a Dockerfile to containerize Redcap running on a LAMP server. It also contains configuration files to deploy this container on a k8s cluster.
 
 ## Secrets ##
-**Please do not store any passwords, credentials, or secret files in this repository**. All secret files are stored in the PICI LastPass under the path GCP-Credentials4Development\Redcap. You can find secrets and passwords for existing deployments in this shared folder. When creating a new deployment please create a new shared folder in the same path and add all secrets to that folder.
+**You should not store any passwords, credentials, or secret files in your repository**. We recommend you store all secret files, passwords, and credentials stored in LastPass or another secure password manager.
 
 ## Building the Docker Image ##
 
@@ -300,6 +300,83 @@ Once this is done they will need to navigate to Control Center and then to File 
 
 They should then navigate to the Control Center again and then to the Configuration Check to make sure that the webserver has been deployed and configured correctly.
 
+## Upgrading Redcap ##
+First you will want to take the Redcap instance being upgraded offline. Navigate to the control center for the instance being upgraded, next to general configuration, and finally set the system status as offline.
+
+Once the system is offline you will need to download the full install zip for version of Redcap you are upgrading to (e.g. redcap8.6.0.zip).
+Download the zip, add it to the code folder in the redcap-k8s repository, and delete the old zip.
+
+Next you will want to modify the Dockerfile to use the new zip. Change the unzip command to unzip the new redcap zip. In the below example you would replace `unzip /code/redcap8.1.5.zip` with `unzip /code/redcap8.6.0.zip`
+
+```shell
+RUN mkdir /var/www/site/ && \
+    cd /code && unzip /code/redcap8.1.5.zip && \
+    mv /code/redcap/* /var/www/site/ && \
+    mv /code/database.php /var/www/site/database.php && \
+    mv /code/apache-config.conf /etc/apache2/sites-enabled/000-default.conf && \
+    mv /code/php.ini /etc/php/7.0/apache2/php.ini
+```
+
+Once you have updated the Dockerfile you will need to build a new Docker image and push it to the GCR in your project.
+
+```shell
+docker build -t gcr.io/<PROJECT_ID>/redcap:8.6.0 .
+```
+
+```shell
+docker push gcr.io/<PROJECT_ID>/redcap:8.6.0
+```
+Next you will update the k8s deployment file `redcap-deployment.yaml`. You will hcange the image to point to the new image you just built and temporarily remove the liveliness probe and readiness probe. The liveliness and readiness probes need to be removed during the upgrade because the endpoints that are used by these probes will be broken until the upgrade is complete. To remove the liveliness and readiness probes you will remove these sections from the `redcap-deployment.yaml` file.
+
+```
+livenessProbe:
+  httpGet:
+    path: /
+    port: 80
+  initialDelaySeconds: 30
+  timeoutSeconds: 1
+readinessProbe:
+  httpGet:
+    path: /
+    port: 80
+  initialDelaySeconds: 30
+  timeoutSeconds: 1
+```
+
+Once this is done you can update the deployment with the following command:
+
+```
+kubectl --namespace=redcap apply -f ./redcap-deployment.yaml
+```
+
+You can check the status of the new pods by looking at the redcap-deployment service in the Kubernetes Engine page on the Google Cloud console or by running the following command.
+
+```
+kubectl --namespace=redcap get pods
+```
+
+Once the new pods are up navigate to the upgrade module in the new version. For example, when upgrading to 8.6.0 we would navigate to `https://redcap.yourdomain.org/redcap_v8.6.0/upgrade.php`
+Once here, follow the instructions on this page.
+
+When following the instructions you may need to copy an SQL script and execute it. The easiest way to accomplish this is to connect to the CloudSQL instance through the Google Cloud Console, but any SQL client should suffice. In some instances, long upgrade scripts might not execute correctly on the Google Cloud Console.
+
+Once you have followed the instructions on the upgrade page you should be done updating to the new version of Redcap and forwarded back to the login page. At this point you should login and do a quick check to make sure everything is working as expected.
+
+Next, we want to add the liveliness and readiness probes back to k8s/redcap-deployment.yaml and update the deployment again.
+
+Once the deployment is updated we can update the cron job file `redcap-cron.yaml` with the new image and deploy the change with the following command.
+
+```
+kubectl --namespace=redcap apply -f ./k8s/redcap-cron.yaml
+```
+
+In Redcap, navigate to the configuration check (e.g. https://redcap.yourdomain.org/redcap_v8.6.0/ControlCenter/check.php) to make sure that there are no problems with dependencies or configuration. This is unlikely, but if there are you will probably need to install new dependencies in the Docker image and re-deploy.
+
+At this point we are done making changes to our Kubernetes configurations. Add and commit all of the changes you just made to your repository.
+
+Now that we are done with the upgrade we should put the Redcap instance back online. Navigate to the control center, then general configuration, then set the system status as online.
+
+You are now done with the update!
 
 ## License ##
 
