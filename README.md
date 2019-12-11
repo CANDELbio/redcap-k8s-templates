@@ -237,22 +237,22 @@ $ host -a redcap.<your-domain>.org
 
 Follow [these instructions](https://docs.cert-manager.io/en/latest/getting-started/install/kubernetes.html#installing-with-helm) to install cert-manager on the cluster. At the time of writing, v0.12.0 was the most recent version. If you are upgrading from an older version of cert-manager, it can be easier to [uninstall](https://cert-manager.io/docs/installation/uninstall/kubernetes/) and then reinstall.
 
-First, go to the files located at `./k8s/templates/issuers/staging-issuer.yaml` and `./k8s/templates/production-issuer.yaml` and replace `your-email@here.com` with an email address where notifications about your SSL certificates should be sent.
+Once cert-manager is installed, go to the files located at `./k8s/templates/issuers/staging-issuer.yaml` and `./k8s/templates/production-issuer.yaml` and replace `your-email@here.com` with an email address where notifications about your SSL certificates should be sent.
 
-Next, setup the staging and production issuers.
+Next, create the staging and production issuers on the cluster.
 
 ```shell
 $ kubectl --namespace=redcap apply -f ./k8s/templates/issuers/staging-issuer.yaml
 $ kubectl --namespace=redcap apply -f ./k8s/templates/templates/production-issuer.yaml
 ```
 
-Now we can deploy our ingress with the cert-manager field uncommented. Edit the file `./k8s/templates/redcap/redcap-ingress.yaml`. Uncomment the cert-manager.io/issuer line that is shown below.
+Now we can deploy our ingress with the cert-manager field uncommented. Edit the file `./k8s/templates/redcap/redcap-ingress.yaml`. Uncomment the staging cert-manager.io/issuer line that is shown below.
 
 ```
     cert-manager.io/issuer: "letsencrypt-staging"
 ```
 
-Now apply it.
+Save and apply it.
 
 ```shell
 $ kubectl --namespace=redcap apply -f ./k8s/templates/redcap/redcap-ingress.yaml
@@ -279,20 +279,19 @@ We can watch the cert-manager logs to watch progress or see if anything has gone
 $ kubectl logs deployment/cert-manager cert-manager --namespace cert-manager -f
 ```
 
-Once we have successfully verified that certificate issuing is working with a stating issuer we can switch the ingress over to using the production issuer. Edit the file `./k8s/templates/redcap/redcap-ingress.yaml`. Comment out the following line:
+Once we have successfully verified that certificate issuing is working with a stating issuer we can switch the ingress over to using the production issuer. Edit the file `./k8s/templates/redcap/redcap-ingress.yaml`. Comment out the staging cert-manager line:
 
 ```
     cert-manager.io/issuer: "letsencrypt-staging"
 ```
 
-And then uncomment the following line:
+And then uncomment the production cert-manager line:
 
 ```
     cert-manager.io/issuer: "letsencrypt-prod"
 ```
 
-
-Now save and apply it.
+Save and apply it.
 
 ```shell
 $ kubectl --namespace=redcap apply -f ./k8s/templates/redcap/redcap-ingress.yaml
