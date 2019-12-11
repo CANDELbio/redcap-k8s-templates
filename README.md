@@ -228,65 +228,88 @@ $ kubectl --namespace=redcap apply -f ./k8s/templates/redcap/redcap-ingress.yaml
 Point DNS to the IP address for the load balancer. Verify that it's working with either of the following:
 
 ```shell
-$ dig redcap.yourdomain.org
+$ dig redcap.<your-domain>.org
 ```
 
 ```shell
-$ host -a redcap.yourdomain.org
+$ host -a redcap.<your-domain>.org
 ```
 
-Install the cert-manager chart onto the cluster. You only need one cert-manager instance per cluster
+Follow [these instructions](https://docs.cert-manager.io/en/latest/getting-started/install/kubernetes.html#installing-with-helm) to install cert-manager on the cluster. At the time of writing, v0.12.0 was the most recent version. If you are upgrading from an older version of cert-manager, it can be easier to [uninstall](https://cert-manager.io/docs/installation/uninstall/kubernetes/) and then reinstall.
+
+First, go to the files located at `./k8s/templates/issuers/staging-issuer.yaml` and `./k8s/templates/production-issuer.yaml` and replace `your-email@here.com` with an email address where notifications about your SSL certificates should be sent.
+
+Next, setup the staging and production issuers.
 
 ```shell
-$ git clone https://github.com/jetstack/cert-manager
-$ cd cert-manager
-$ git checkout v0.3.0
-$ helm install --name cert-manager --namespace kube-system contrib/charts/cert-manager
+$ kubectl --namespace=redcap apply -f ./k8s/templates/issuers/staging-issuer.yaml
+$ kubectl --namespace=redcap apply -f ./k8s/templates/templates/production-issuer.yaml
 ```
 
-Set up the Issuer and Certificate. Change the email value in the issuer to an email address where registration notifications should be sent. You will also need to change the values in redcap-staging-cert to match your domain name.
+Now we can deploy our ingress with the cert-manager field uncommented. Edit the file `./k8s/templates/redcap/redcap-ingress.yaml`. Uncomment the cert-manager.io/issuer line that is shown below.
 
-```shell
-$ kubectl --namespace=redcap apply -f ./k8s/templates/acme/acme-staging-issuer.yaml
-$ kubectl --namespace=redcap apply -f ./k8s/templates/redcap/redcap-staging-cert.yaml
-$ kubectl --namespace=redcap get certificates
+```
+    cert-manager.io/issuer: "letsencrypt-staging"
 ```
 
-At this point we can check the status of the certificate with this command. It may fail the first time and take a minute or so for the domain to be validated and the certificate to be issued. You will need to change the name of the certificate you are describing to reflect the changes you made to redcap-staging-cert.
+Now apply it.
 
 ```shell
-$ kubectl --namespace=redcap describe certificate redcap-yourdomain-org-tls
+$ kubectl --namespace=redcap apply -f ./k8s/templates/redcap/redcap-ingress.yaml
+```
+
+After applying the updated ingress, cert-manager should create a new certificate for you. You can check to make sure by running the following.
+
+```
+ kubectl --namespace=redcap get certificate
+
+ NAME                       READY   SECRET                     AGE
+redcap-<your-domain>-org-tls   True   redcap-<your-domain>-org-tls   11s
+ ```
+
+At this point we can check the status of the certificate with this command. It may fail the first time and take a minute or so for the domain to be validated and the certificate to be issued.
+
+```shell
+$ kubectl --namespace=redcap describe certificate redcap-<your-domain>-org-tls
 ```
 
 We can watch the cert-manager logs to watch progress or see if anything has gone wrong.
 
 ```shell
-$ kubectl logs deployment/cert-manager-cert-manager cert-manager --namespace kube-system -f
+$ kubectl logs deployment/cert-manager cert-manager --namespace cert-manager -f
 ```
 
-Once we have successfully verified that certificate issuing is working with a stating issuer we will create a production issuer. You will need to change the email value in the issuer to an email address where registration notifications should be sent.
+Once we have successfully verified that certificate issuing is working with a stating issuer we can switch the ingress over to using the production issuer. Edit the file `./k8s/templates/redcap/redcap-ingress.yaml`. Comment out the following line:
+
+```
+    cert-manager.io/issuer: "letsencrypt-staging"
+```
+
+And then uncomment the following line:
+
+```
+    cert-manager.io/issuer: "letsencrypt-prod"
+```
+
+
+Now save and apply it.
 
 ```shell
-$ kubectl --namespace=redcap apply -f ./k8s/templates/acme/acme-issuer.yaml
+$ kubectl --namespace=redcap apply -f ./k8s/templates/redcap/redcap-ingress.yaml
 ```
 
-Once this is created, we will delete the staging certificate and tls secret, and replace it with a production one. You will need to change the values in the production redcap-cert to match your domain name.
+We can now check for and describe the updated certificate. Once it's ready, Redcap should have a valid certificate and be properly serving traffic over SSL!
+
+```
+ kubectl --namespace=redcap get certificate
+
+ NAME                       READY   SECRET                     AGE
+redcap-<your-domain>-org-tls   True   redcap-<your-domain>-org-tls   11s
+ ```
 
 ```shell
-$ kubectl --namespace=redcap delete certificate redcap-yourdomain-org-tls
-$ kubectl --namespace=redcap delete secret redcap-yourdomain-org-tls
-$ kubectl --namespace=redcap apply -f ./k8s/templates/redcap/redcap-cert.yaml
+$ kubectl --namespace=redcap describe certificate redcap-<your-domain>-org-tls
 ```
-
-Check the status of the certificate again with this command. It may fail the first time and take a minute or so for the domain to be validated and the certificate to be issued. You will need to change the name of the certificate you are describing to reflect the changes you made to redcap-cert.
-
-```shell
-$ kubectl --namespace=redcap describe certificate redcap-yourdomain-org-tls
-```
-
-At this point Redcap should have a valid certificate and be properly serving traffic over SSL!
-
-In the future, you may want to use the cert-manager Ingress Shim. This would allow you to tag your Ingress with an certmanager.k8s.io/issuer annotation instead of explicitly creating a Certificate.
 
 ## Installing Redcap ##
 
