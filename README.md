@@ -184,30 +184,30 @@ You can view the status of these workloads and services from the GKE page in the
 
 Loosely following [this guide](https://blog.n1analytics.com/free-automated-tls-certificates-on-k8s/) for automated TLS certificates.
 
-[Setup Helm](https://docs.helm.sh/using_helm/). If you use a Mac and have Homebrew installed you can do this by running the following command.
+Setup Helm locally.
 
-```shell
+```bash
 $ brew install kubernetes-helm
 ```
 
-Install Tiller on the cluster
+Or make sure it's up to date if already installed.
 
-```shell
-$ kubectl create serviceaccount --namespace kube-system tiller
-$ kubectl create clusterrolebinding tiller-cluster-rule --clusterrole=cluster-admin --serviceaccount=kube-system:tiller
-$ helm init --service-account tiller
+```bash
+$ brew upgrade kubernetes-helm
 ```
 
-Replace the field controller.service.loadBalancerIP in nginx-ingress.yaml with an **unused/unbound** [reserved regional external IP from GCP](https://cloud.google.com/compute/docs/ip-addresses/reserve-static-external-ip-address).
+Reserve an **unused/unbound** [reserved regional external IP from GCP](https://cloud.google.com/compute/docs/ip-addresses/reserve-static-external-ip-address) IP address for the nginx load balancer.
 
-```shell
-gcloud compute addresses create redcap --region us-west-1a
+```bash
+gcloud compute addresses create redcap-test --region <CLUSTER-REGION>
 ```
 
 Install the nginx-ingress chart with the custom static IP. If you are installing multiple ingresses in the same culster you must name them differently.
 
-```shell
-$ helm install --namespace redcap --name nginx-ingress stable/nginx-ingress --values ./k8s/templates/helm/nginx-ingress.yaml
+```bash
+$ helm repo add stable https://kubernetes-charts.storage.googleapis.com
+$ helm repo update
+$ helm install --namespace redcap nginx-ingress  stable/nginx-ingress --set controller.service.loadBalancerIP=<RESERVED-IP>
 ```
 
 We can use the following command to check when our static IP has been assigned to the load balancer.
