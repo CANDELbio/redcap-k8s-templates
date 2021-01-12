@@ -61,8 +61,8 @@ spec:
                     - "sh"
                     - "-c"
                     - >
-                      gcsfuse -o nonempty -o allow_other --dir-mode 777 --file-mode 777 redcap /mnt/redcap-bucket;
-                      gcsfuse -o nonempty -o allow_other --dir-mode 777 --file-mode 777 redcap-temp /var/www/site/temp;
+                      gcsfuse -o allow_other --dir-mode 777 --file-mode 777 redcap /mnt/redcap-bucket;
+                      gcsfuse -o allow_other --dir-mode 777 --file-mode 777 redcap-temp /var/www/site/temp;
               preStop:
                 exec:
                   command:
