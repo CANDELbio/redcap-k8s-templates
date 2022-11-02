@@ -400,6 +400,6 @@ Now that we are done with the upgrade we should put the Redcap instance back onl
 
 You are now done with the update!
 
-## License ##
+## License
 
-This repository is made available and distributed under the GPLv3 license.
+Released under Apache 2 license. See the [LICENSE](LICENSE.md) file for details.
